@@ -10,5 +10,6 @@
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
-/cmd/aura/Dockerfile
 /.vscode/launch.json
+/aura/Dockerfile
+/aura/internal/config/neweden-admin.json

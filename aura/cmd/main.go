@@ -37,19 +37,22 @@ type User struct {
 }
 
 func main() {
-	opt := option.WithCredentialsFile("path/to/serviceAccountKey.json")
+	opt := option.WithCredentialsFile("../internal/config/neweden-admin.json")
+	config := &firebase.Config{ProjectID: os.Getenv("PROJECT_ID"), DatabaseURL: os.Getenv("DATABASE_URL")}
 
-	app, error := firebase.NewApp(ctx, nil, opt)
+	app, error := firebase.NewApp(ctx, config, opt)
 	if error != nil {
 		fmt.Println("Error initializing firebase app: ", error)
+		return
 	}
 
 	database, error = app.Database(ctx)
 	if error != nil {
 		fmt.Println("Error fetching firebase client: ", error)
+		return
 	}
 
-	discord, error := discordgo.New("Bot " + os.Getenv("BOT_TOKEN"))
+	discord, error = discordgo.New("Bot " + os.Getenv("BOT_TOKEN"))
 	if error != nil {
 		fmt.Println("Error creating discord client: ", error)
 		return
@@ -72,31 +75,38 @@ func main() {
 	discord.Close()
 }
 
+func getMemberRoles(member *discordgo.GuildMemberAdd, user *User) []string {
+	updatedList := []string{}
+
+	roles, error := discord.GuildRoles(member.Member.GuildID)
+	if error != nil {
+		fmt.Println("Error getting guild roles", error)
+		return updatedList
+	}
+
+	for _, role := range roles {
+		if (user == nil || user.id == "") && role.Name == "Guest" {
+			updatedList = append(updatedList, role.ID)
+		}
+	}
+
+	return updatedList
+}
+
 func ready(session *discordgo.Session, ready *discordgo.Ready) {
 	fmt.Println("Aura has started! All systems green.")
 }
 
 func memberAdded(session *discordgo.Session, member *discordgo.GuildMemberAdd) {
-	guildID := member.Member.GuildID
-	userID := member.Member.User.ID
-
 	var user User
-	if error := database.NewRef("discord/"+userID).Get(ctx, &user); error != nil {
-		var guestRoleID string
-		roles, error := discord.GuildRoles(guildID)
-		if error != nil {
-			fmt.Println("Error getting guild roles", error)
-		}
 
-		for _, role := range roles {
-			if role.Name == "Guest" {
-				guestRoleID = role.ID
-			}
-		}
+	userID := member.Member.User.ID
+	error := database.NewRef("discord/"+userID).Get(ctx, &user)
 
-		discord.GuildMemberEdit(guildID, userID, []string{guestRoleID})
+	if error != nil || user.id != userID {
+		roles := getMemberRoles(member, &user)
+		discord.GuildMemberEdit(member.Member.GuildID, userID, roles)
 	}
-
 }
 
 func messageCreate(session *discordgo.Session, message *discordgo.MessageCreate) {
