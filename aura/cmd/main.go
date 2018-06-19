@@ -25,15 +25,15 @@ var (
 )
 
 type User struct {
-	accessToken  string
-	accountId    string
-	email        string
-	expiresAt    uint64
-	id           string
-	refreshToken string
-	scope        string
-	tokenType    string
-	username     string
+	AccessToken  string `json:"accessToken"`
+	AccountID    string `json:"accountId"`
+	Email        string `json:"email"`
+	ExpiresAt    uint64 `json:"expiresAt"`
+	ID           string `json:"id"`
+	RefreshToken string `json:"refreshToken"`
+	Scope        string `json:"scope"`
+	TokenType    string `json:"tokenType"`
+	Username     string `json:"username"`
 }
 
 func main() {
@@ -75,7 +75,23 @@ func main() {
 	discord.Close()
 }
 
-func getMemberRoles(member *discordgo.GuildMemberAdd, user *User) []string {
+func processNewMember(session *discordgo.Session, member *discordgo.GuildMemberAdd) {
+	var user User
+
+	userID := member.Member.User.ID
+
+	// guarentee that firebase has updated user account before pulling it, it is a dirty
+	// hack but needed to make sure users aren't improperly marked as guests
+	time.Sleep(1000 * 30)
+
+	error := database.NewRef("discord/"+userID).Get(ctx, &user)
+	if error != nil || user.ID != userID {
+		roles := getMemberRoles(member)
+		discord.GuildMemberEdit(member.Member.GuildID, userID, roles)
+	}
+}
+
+func getMemberRoles(member *discordgo.GuildMemberAdd) []string {
 	updatedList := []string{}
 
 	roles, error := discord.GuildRoles(member.Member.GuildID)
@@ -85,7 +101,7 @@ func getMemberRoles(member *discordgo.GuildMemberAdd, user *User) []string {
 	}
 
 	for _, role := range roles {
-		if (user == nil || user.id == "") && role.Name == "Guest" {
+		if role.Name == "Guest" {
 			updatedList = append(updatedList, role.ID)
 		}
 	}
@@ -98,15 +114,7 @@ func ready(session *discordgo.Session, ready *discordgo.Ready) {
 }
 
 func memberAdded(session *discordgo.Session, member *discordgo.GuildMemberAdd) {
-	var user User
-
-	userID := member.Member.User.ID
-	error := database.NewRef("discord/"+userID).Get(ctx, &user)
-
-	if error != nil || user.id != userID {
-		roles := getMemberRoles(member, &user)
-		discord.GuildMemberEdit(member.Member.GuildID, userID, roles)
-	}
+	go processNewMember(session, member)
 }
 
 func messageCreate(session *discordgo.Session, message *discordgo.MessageCreate) {
