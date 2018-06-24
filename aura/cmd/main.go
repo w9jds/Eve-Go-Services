@@ -24,7 +24,7 @@ var (
 	database *db.Client
 )
 
-type User struct {
+type user struct {
 	AccessToken  string `json:"accessToken"`
 	AccountID    string `json:"accountId"`
 	Email        string `json:"email"`
@@ -76,7 +76,7 @@ func main() {
 }
 
 func processNewMember(session *discordgo.Session, member *discordgo.GuildMemberAdd) {
-	var user User
+	var user *user
 
 	userID := member.Member.User.ID
 
@@ -84,8 +84,8 @@ func processNewMember(session *discordgo.Session, member *discordgo.GuildMemberA
 	// hack but needed to make sure users aren't improperly marked as guests
 	time.Sleep(1000 * 30)
 
-	error := database.NewRef("discord/"+userID).Get(ctx, &user)
-	if error != nil || user.ID != userID {
+	error := database.NewRef("discord/"+userID).Get(ctx, user)
+	if error != nil || user == nil || user.ID != userID {
 		roles := getMemberRoles(member)
 		discord.GuildMemberEdit(member.Member.GuildID, userID, roles)
 	}
